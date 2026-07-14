@@ -184,8 +184,10 @@ const wanted = [
   ".opencode/project/MEMORY.md",
   ".opencode/project/HANDOFF.md",
 ]
+const original = fs.existsSync(input) ? fs.readFileSync(input, "utf8") : ""
 let config = { $schema: "https://opencode.ai/config.json" }
-if (fs.existsSync(input)) config = JSON.parse(fs.readFileSync(input, "utf8"))
+if (original) config = JSON.parse(original)
+const before = JSON.stringify(config)
 const current = Array.isArray(config.instructions) ? config.instructions : []
 if (mode === "install") {
   config.instructions = [...new Set([...current, ...wanted])]
@@ -195,7 +197,10 @@ if (mode === "install") {
   if (next.length) config.instructions = next
   else delete config.instructions
 }
-fs.writeFileSync(output, JSON.stringify(config, null, 2) + "\n")
+const rendered = JSON.stringify(config) === before && original
+  ? original
+  : JSON.stringify(config, null, 2) + "\n"
+fs.writeFileSync(output, rendered)
 NODE
 }
 
@@ -229,16 +234,26 @@ const endIndex = text.indexOf(end)
 if ((startIndex === -1) !== (endIndex === -1) || (startIndex !== -1 && endIndex < startIndex)) {
   throw new Error("AGENTS.md contains an incomplete opencode-markdown-memory managed block")
 }
-if (startIndex !== -1) {
-  const after = endIndex + end.length
-  text = text.slice(0, startIndex).trimEnd() + text.slice(after)
-  text = text.replace(/^\s+/, "")
-}
 if (mode === "install") {
   const snippet = fs.readFileSync(snippetPath, "utf8").trim()
-  text = text.trimEnd()
-  text = (text ? text + "\n\n" : "") + snippet + "\n"
+  if (startIndex !== -1) {
+    const after = endIndex + end.length
+    const existing = text.slice(startIndex, after).trim()
+    if (existing === snippet) {
+      fs.writeFileSync(output, text)
+      process.exit(0)
+    }
+    text = text.slice(0, startIndex) + snippet + text.slice(after)
+  } else {
+    text = text.trimEnd()
+    text = (text ? text + "\n\n" : "") + snippet + "\n"
+  }
 } else {
+  if (startIndex !== -1) {
+    const after = endIndex + end.length
+    text = text.slice(0, startIndex).trimEnd() + text.slice(after)
+    text = text.replace(/^\s+/, "")
+  }
   text = text.trim()
   text = text ? text + "\n" : ""
 }
