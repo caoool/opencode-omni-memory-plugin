@@ -73,7 +73,24 @@ The installer edits strict JSON. If your only global configuration is an `openco
 
 ## Install
 
-### Recommended: inspect and clone
+### Recommended: npm package
+
+The package bundles the installer and all managed files, so no separate clone is required:
+
+```bash
+npx opencode-omni-memory-plugin install
+```
+
+Or install it globally to keep the `update`, `status`, and `uninstall` subcommands handy:
+
+```bash
+npm install -g opencode-omni-memory-plugin
+opencode-omni-memory-plugin install
+```
+
+Then quit and restart OpenCode. The same subcommands documented below (`update`, `status`, `uninstall`) work through the `opencode-omni-memory-plugin` binary.
+
+### Alternative: inspect and clone
 
 ```bash
 INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode-omni-memory-plugin/repo"

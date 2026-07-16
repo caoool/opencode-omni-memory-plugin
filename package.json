@@ -1,0 +1,49 @@
+{
+  "name": "opencode-omni-memory-plugin",
+  "version": "2.0.0",
+  "description": "Native, local, Git-friendly long-term memory and project continuity for OpenCode: a global skill, companion plugin, slash commands, and instruction wiring.",
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "memory",
+    "long-term-memory",
+    "agent",
+    "ai",
+    "skill"
+  ],
+  "homepage": "https://github.com/caoool/opencode-omni-memory-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/caoool/opencode-omni-memory-plugin/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/caoool/opencode-omni-memory-plugin.git"
+  },
+  "license": "MIT",
+  "author": "caoool",
+  "type": "commonjs",
+  "bin": {
+    "opencode-omni-memory-plugin": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "install.sh",
+    "manifest.txt",
+    "VERSION",
+    "skills/",
+    "plugins/",
+    "commands/",
+    "defaults/",
+    "snippets/"
+  ],
+  "scripts": {
+    "test": "bash tests/install-smoke.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

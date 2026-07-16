@@ -1,0 +1,66 @@
+name: Publish to npm
+
+# Publishes the package to npm when a GitHub Release is published.
+# Uses npm Trusted Publishing (OIDC): configure the trusted publisher for this
+# package at npmjs.com to point at this repository + workflow. No NPM_TOKEN
+# secret is required, and provenance is attached automatically.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run npm publish with --dry-run only"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Use latest npm (Trusted Publishing support)
+        run: npm install -g npm@latest
+
+      - name: Verify version matches release tag
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          pkg_version="$(node -p "require('./package.json').version")"
+          file_version="$(tr -d '[:space:]' < VERSION)"
+          tag_version="${RELEASE_TAG#v}"
+          echo "package.json: $pkg_version"
+          echo "VERSION file: $file_version"
+          echo "release tag : $tag_version"
+          if [ "$pkg_version" != "$file_version" ]; then
+            echo "::error::package.json ($pkg_version) does not match VERSION ($file_version)"
+            exit 1
+          fi
+          if [ "$pkg_version" != "$tag_version" ]; then
+            echo "::error::package.json ($pkg_version) does not match release tag ($tag_version)"
+            exit 1
+          fi
+
+      - name: Run install smoke test
+        run: npm test
+
+      - name: Publish (dry run)
+        if: github.event_name == 'workflow_dispatch' && inputs.dry_run
+        run: npm publish --dry-run
+
+      - name: Publish to npm
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
+        run: npm publish
