@@ -1,8 +1,10 @@
-# OpenCode Markdown Memory
+# OpenCode Omni Memory Plugin
 
 Native, local, Git-friendly long-term memory and project continuity for [OpenCode](https://opencode.ai/).
 
-The package installs a global `markdown-memory` skill, seven slash commands, global memory files, and OpenCode instruction wiring. It keeps durable memory separate from mutable project state such as specifications, roadmaps, progress, findings, decisions, and session handoffs.
+The package installs a global `omni-memory` skill, a companion plugin, seven slash commands, global memory files, and OpenCode instruction wiring. It keeps durable memory separate from mutable project state such as specifications, roadmaps, progress, findings, decisions, and session handoffs.
+
+Formerly published as `opencode-markdown-memory`; installing this version over an old install migrates it in place.
 
 ## Features
 
@@ -14,9 +16,20 @@ The package installs a global `markdown-memory` skill, seven slash commands, glo
 - Roadmap, progress, findings, and decision tracking
 - Temporary journals for concurrent sessions
 - Conservative automatic capture at meaningful transitions
+- Self-evolution: user corrections and repeated friction are captured once, then promoted from memory into governing configuration
+- Session bootstrap injected by the companion plugin so memory behavior is in context from turn one
+- Compaction defense: the plugin instructs continuation summaries to carry forward memory pointers and un-persisted decisions
 - Bounded startup injection with detailed retrieval on demand
 - Plain Markdown storage with no external memory service
 - Idempotent installer with update, status, backup, and uninstall support
+
+## How it works
+
+Three layers cooperate:
+
+1. **Instructions** (`opencode.json` `instructions` array) auto-load global memory, project memory, and the project handoff into every request.
+2. **Plugin** (`plugins/omni-memory.js`) injects a compact orientation bootstrap into the first user message of each session (idempotent, marker-guarded) and pushes continuation requirements into the compaction prompt via `experimental.session.compacting`. The plugin cannot write files; it makes behavior consistent, while the skill defines it.
+3. **Skill** (`skills/omni-memory`) holds the full rulebook — orientation, precedence, retention, transitions, concurrency, handoff, archival — and is loaded on demand for substantive work.
 
 ## Storage model
 
@@ -63,8 +76,8 @@ The installer edits strict JSON. If your only global configuration is an `openco
 ### Recommended: inspect and clone
 
 ```bash
-INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode-markdown-memory/repo"
-git clone https://github.com/caoool/opencode-markdown-memory.git "$INSTALL_DIR"
+INSTALL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/opencode-omni-memory-plugin/repo"
+git clone https://github.com/caoool/opencode-omni-memory-plugin.git "$INSTALL_DIR"
 "$INSTALL_DIR/install.sh" install
 ```
 
@@ -75,48 +88,58 @@ Then quit and restart OpenCode.
 This downloads the installer, which clones the repository into the managed data directory before installing:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/caoool/opencode-markdown-memory/main/install.sh | bash -s -- install
+curl -fsSL https://raw.githubusercontent.com/caoool/opencode-omni-memory-plugin/main/install.sh | bash -s -- install
 ```
 
 Review remote scripts before piping them to a shell if you do not control the source.
+
+### Migrating from opencode-markdown-memory
+
+Run `install` (or `update`) from this repository. The installer:
+
+- Replaces the legacy `skills/markdown-memory` with `skills/omni-memory` (the legacy copy is backed up)
+- Migrates the managed `AGENTS.md` block from the old `opencode-markdown-memory` markers to the new ones in place
+- Leaves all memory data untouched
+
+If your old managed checkout lives at `~/.local/share/opencode-markdown-memory/repo`, point its remote at the renamed repository or re-clone into the new path shown above.
 
 ## Update
 
 For the recommended managed checkout:
 
 ```bash
-"${XDG_DATA_HOME:-$HOME/.local/share}/opencode-markdown-memory/repo/install.sh" update
+"${XDG_DATA_HOME:-$HOME/.local/share}/opencode-omni-memory-plugin/repo/install.sh" update
 ```
 
 If you cloned the repository elsewhere:
 
 ```bash
-/path/to/opencode-markdown-memory/install.sh update
+/path/to/opencode-omni-memory-plugin/install.sh update
 ```
 
 The updater performs a fast-forward-only Git update and reinstalls managed files. Existing managed files that differ are backed up under:
 
 ```text
-${XDG_DATA_HOME:-$HOME/.local/share}/opencode-markdown-memory/backups/<timestamp>/
+${XDG_DATA_HOME:-$HOME/.local/share}/opencode-omni-memory-plugin/backups/<timestamp>/
 ```
 
 User memory files are created only when missing and are never overwritten during updates.
 
-Restart OpenCode after every install or update because configuration, commands, and skills are loaded at startup.
+Restart OpenCode after every install or update because configuration, commands, plugins, and skills are loaded at startup.
 
 ## Status
 
 ```bash
-"${XDG_DATA_HOME:-$HOME/.local/share}/opencode-markdown-memory/repo/install.sh" status
+"${XDG_DATA_HOME:-$HOME/.local/share}/opencode-omni-memory-plugin/repo/install.sh" status
 ```
 
 ## Uninstall
 
 ```bash
-"${XDG_DATA_HOME:-$HOME/.local/share}/opencode-markdown-memory/repo/install.sh" uninstall
+"${XDG_DATA_HOME:-$HOME/.local/share}/opencode-omni-memory-plugin/repo/install.sh" uninstall
 ```
 
-Uninstall removes managed skills, commands, the managed `AGENTS.md` block, and the three configuration instruction entries. It deliberately preserves:
+Uninstall removes the managed skill, plugin, commands, the managed `AGENTS.md` block, and the three configuration instruction entries. It deliberately preserves:
 
 - `~/.config/opencode/memory/`
 - Every project's `.opencode/project/`
@@ -149,15 +172,17 @@ Prepare a handoff for the next session.
 
 ## Automatic behavior
 
-For substantive tasks, the installed global instructions tell OpenCode to:
+For substantive tasks, the injected bootstrap and installed global instructions tell OpenCode to:
 
-1. Load the `markdown-memory` skill during orientation.
-2. Use active memory and handoff silently.
+1. Orient silently from memory before acting; verified repository state overrides remembered state.
+2. Load the `omni-memory` skill for the full procedure when work is substantive.
 3. Retrieve charter, spec, roadmap, progress, findings, and decisions only when relevant.
 4. Update project state after material decisions, milestone changes, blockers, or verification results.
-5. Perform a conservative durable-memory check at task completion.
+5. Capture user corrections and repeated friction once, in the narrowest correct scope, and promote standing behavior rules out of memory into governing configuration.
+6. Enforce a single writer: only the primary agent writes memory or project state; subagents report candidate lessons instead.
+7. Perform a conservative durable-memory check at task completion.
 
-The skill does not record raw transcripts, logs, secrets, temporary status, or unverified assumptions. A skill-only system also cannot guarantee a final write if OpenCode is terminated abruptly; meaningful-transition checkpoints and `/handoff` provide best-effort continuity.
+The skill does not record raw transcripts, logs, secrets, temporary status, or unverified assumptions. The plugin's compaction hook asks the summarizer to carry forward memory pointers and un-persisted state, but it cannot write files; if OpenCode terminates abruptly, meaningful-transition checkpoints and `/handoff` provide best-effort continuity.
 
 ## Project initialization
 
@@ -196,16 +221,18 @@ If your configuration uses commented JSONC, add those entries manually, temporar
 The installer also maintains an idempotent block in `~/.config/opencode/AGENTS.md` between:
 
 ```text
-<!-- opencode-markdown-memory:start -->
-<!-- opencode-markdown-memory:end -->
+<!-- opencode-omni-memory-plugin:start -->
+<!-- opencode-omni-memory-plugin:end -->
 ```
+
+Legacy `opencode-markdown-memory` markers are migrated automatically.
 
 ## Custom locations and versions
 
 ```bash
 OPENCODE_CONFIG_DIR=/custom/opencode \
-OPENCODE_MARKDOWN_MEMORY_HOME=/custom/data/opencode-markdown-memory \
-OPENCODE_MARKDOWN_MEMORY_REF=main \
+OPENCODE_OMNI_MEMORY_HOME=/custom/data/opencode-omni-memory-plugin \
+OPENCODE_OMNI_MEMORY_REF=main \
 ./install.sh install
 ```
 
@@ -214,9 +241,9 @@ Environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `OPENCODE_CONFIG_DIR` | Override the OpenCode config directory |
-| `OPENCODE_MARKDOWN_MEMORY_HOME` | Override checkout, backups, and install metadata |
-| `OPENCODE_MARKDOWN_MEMORY_REF` | Select the Git branch/ref used by update |
-| `OPENCODE_MARKDOWN_MEMORY_SOURCE` | Install from a local checkout for development/testing |
+| `OPENCODE_OMNI_MEMORY_HOME` | Override checkout, backups, and install metadata |
+| `OPENCODE_OMNI_MEMORY_REF` | Select the Git branch/ref used by update |
+| `OPENCODE_OMNI_MEMORY_SOURCE` | Install from a local checkout for development/testing |
 | `OPENCODE_MEMORY_HOSTNAME` | Override the host-memory filename |
 
 ## Development test
@@ -228,7 +255,7 @@ TEST_HOME="$(mktemp -d)"
 HOME="$TEST_HOME" \
 XDG_CONFIG_HOME="$TEST_HOME/.config" \
 XDG_DATA_HOME="$TEST_HOME/.local/share" \
-OPENCODE_MARKDOWN_MEMORY_SOURCE="$PWD" \
+OPENCODE_OMNI_MEMORY_SOURCE="$PWD" \
 ./install.sh install
 ```
 

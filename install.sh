@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="https://github.com/caoool/opencode-markdown-memory.git"
-REF="${OPENCODE_MARKDOWN_MEMORY_REF:-main}"
+REPO_URL="https://github.com/caoool/opencode-omni-memory-plugin.git"
+REF="${OPENCODE_OMNI_MEMORY_REF:-main}"
 CONFIG_DIR="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
-DATA_ROOT="${OPENCODE_MARKDOWN_MEMORY_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/opencode-markdown-memory}"
+DATA_ROOT="${OPENCODE_OMNI_MEMORY_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/opencode-omni-memory-plugin}"
 MANAGED_REPO="$DATA_ROOT/repo"
 INSTALLED_MANIFEST="$DATA_ROOT/installed-files.txt"
 INSTALLED_VERSION="$DATA_ROOT/installed-version"
@@ -28,19 +28,19 @@ Commands:
 
 Environment:
   OPENCODE_CONFIG_DIR              Override ~/.config/opencode.
-  OPENCODE_MARKDOWN_MEMORY_HOME    Override updater data/checkout location.
-  OPENCODE_MARKDOWN_MEMORY_REF     Git branch or ref to install (default: main).
-  OPENCODE_MARKDOWN_MEMORY_SOURCE  Use a local source checkout (development/testing).
+  OPENCODE_OMNI_MEMORY_HOME    Override updater data/checkout location.
+  OPENCODE_OMNI_MEMORY_REF     Git branch or ref to install (default: main).
+  OPENCODE_OMNI_MEMORY_SOURCE  Use a local source checkout (development/testing).
   OPENCODE_MEMORY_HOSTNAME         Override the generated host-memory filename.
 EOF
 }
 
 log() {
-  printf '[opencode-markdown-memory] %s\n' "$*"
+  printf '[opencode-omni-memory-plugin] %s\n' "$*"
 }
 
 die() {
-  printf '[opencode-markdown-memory] ERROR: %s\n' "$*" >&2
+  printf '[opencode-omni-memory-plugin] ERROR: %s\n' "$*" >&2
   exit 1
 }
 
@@ -52,9 +52,9 @@ prepare_source() {
   need git
   need node
 
-  if [[ -n "${OPENCODE_MARKDOWN_MEMORY_SOURCE:-}" ]]; then
-    SOURCE_DIR="$OPENCODE_MARKDOWN_MEMORY_SOURCE"
-  elif [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/VERSION" && -d "$SCRIPT_DIR/skills/markdown-memory" ]]; then
+  if [[ -n "${OPENCODE_OMNI_MEMORY_SOURCE:-}" ]]; then
+    SOURCE_DIR="$OPENCODE_OMNI_MEMORY_SOURCE"
+  elif [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/VERSION" && -d "$SCRIPT_DIR/skills/omni-memory" ]]; then
     SOURCE_DIR="$SCRIPT_DIR"
   else
     SOURCE_DIR="$MANAGED_REPO"
@@ -67,9 +67,9 @@ prepare_source() {
 
   [[ -f "$SOURCE_DIR/VERSION" ]] || die "Invalid source: VERSION is missing from $SOURCE_DIR"
   [[ -f "$SOURCE_DIR/manifest.txt" ]] || die "Invalid source: manifest.txt is missing from $SOURCE_DIR"
-  [[ -d "$SOURCE_DIR/skills/markdown-memory" ]] || die "Invalid source: markdown-memory skill is missing"
+  [[ -d "$SOURCE_DIR/skills/omni-memory" ]] || die "Invalid source: omni-memory skill is missing"
 
-  if [[ "$ACTION" == "update" && -z "${OPENCODE_MARKDOWN_MEMORY_SOURCE:-}" ]]; then
+  if [[ "$ACTION" == "update" && -z "${OPENCODE_OMNI_MEMORY_SOURCE:-}" ]]; then
     [[ -d "$SOURCE_DIR/.git" ]] || die "Update requires a Git checkout: $SOURCE_DIR"
     log "Updating $SOURCE_DIR from $REF"
     git -C "$SOURCE_DIR" fetch origin "$REF"
@@ -226,13 +226,30 @@ render_agents() {
   node - "$agents" "$snippet" "$output" "$mode" <<'NODE'
 const fs = require("fs")
 const [agentsPath, snippetPath, output, mode] = process.argv.slice(2)
-const start = "<!-- opencode-markdown-memory:start -->"
-const end = "<!-- opencode-markdown-memory:end -->"
 let text = fs.existsSync(agentsPath) ? fs.readFileSync(agentsPath, "utf8") : ""
-const startIndex = text.indexOf(start)
-const endIndex = text.indexOf(end)
-if ((startIndex === -1) !== (endIndex === -1) || (startIndex !== -1 && endIndex < startIndex)) {
-  throw new Error("AGENTS.md contains an incomplete opencode-markdown-memory managed block")
+// Current markers, plus the legacy pre-rename markers so installs migrate
+// the old opencode-markdown-memory block in place instead of duplicating it.
+const markerPairs = [
+  ["<!-- opencode-omni-memory-plugin:start -->", "<!-- opencode-omni-memory-plugin:end -->"],
+  ["<!-- opencode-markdown-memory:start -->", "<!-- opencode-markdown-memory:end -->"],
+]
+let start = markerPairs[0][0]
+let end = markerPairs[0][1]
+let startIndex = -1
+let endIndex = -1
+for (const [s, e] of markerPairs) {
+  const si = text.indexOf(s)
+  const ei = text.indexOf(e)
+  if ((si === -1) !== (ei === -1) || (si !== -1 && ei < si)) {
+    throw new Error("AGENTS.md contains an incomplete managed memory block (" + s + ")")
+  }
+  if (si !== -1) {
+    start = s
+    end = e
+    startIndex = si
+    endIndex = ei
+    break
+  }
 }
 if (mode === "install") {
   const snippet = fs.readFileSync(snippetPath, "utf8").trim()
@@ -269,6 +286,17 @@ NODE
   log "Updated $agents"
 }
 
+remove_legacy_paths() {
+  # Pre-rename installs used skills/markdown-memory; leaving it alongside
+  # skills/omni-memory would register two overlapping skills.
+  local legacy="$CONFIG_DIR/skills/markdown-memory"
+  if [[ -e "$legacy" ]]; then
+    backup_path "$legacy"
+    rm -rf -- "$legacy"
+    log "Removed legacy skills/markdown-memory (backed up)"
+  fi
+}
+
 install_payload() {
   choose_config_file
   mkdir -p "$DATA_ROOT"
@@ -277,6 +305,8 @@ install_payload() {
     [[ -z "$rel" || "$rel" == \#* ]] && continue
     install_managed_path "$rel"
   done < "$SOURCE_DIR/manifest.txt"
+
+  remove_legacy_paths
 
   install_default_file "$SOURCE_DIR/defaults/memory/GLOBAL.md" "$CONFIG_DIR/memory/GLOBAL.md"
   install_default_file "$SOURCE_DIR/defaults/memory/HANDOFF.md" "$CONFIG_DIR/memory/HANDOFF.md"
@@ -358,7 +388,7 @@ status() {
     printf 'Config instructions: missing or unreadable\n'
     missing=$((missing + 1))
   fi
-  if [[ -f "$CONFIG_DIR/AGENTS.md" ]] && grep -q '<!-- opencode-markdown-memory:start -->' "$CONFIG_DIR/AGENTS.md"; then
+  if [[ -f "$CONFIG_DIR/AGENTS.md" ]] && grep -q '<!-- opencode-omni-memory-plugin:start -->' "$CONFIG_DIR/AGENTS.md"; then
     printf 'AGENTS.md integration: present\n'
   else
     printf 'AGENTS.md integration: missing\n'
@@ -407,7 +437,7 @@ case "$ACTION" in
     status
     ;;
   uninstall)
-    if [[ -n "${OPENCODE_MARKDOWN_MEMORY_SOURCE:-}" ]]; then SOURCE_DIR="$OPENCODE_MARKDOWN_MEMORY_SOURCE"; fi
+    if [[ -n "${OPENCODE_OMNI_MEMORY_SOURCE:-}" ]]; then SOURCE_DIR="$OPENCODE_OMNI_MEMORY_SOURCE"; fi
     if [[ -z "$SOURCE_DIR" && -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/snippets/AGENTS.md" ]]; then SOURCE_DIR="$SCRIPT_DIR"; fi
     uninstall
     ;;

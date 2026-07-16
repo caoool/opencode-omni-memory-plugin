@@ -1,9 +1,9 @@
 ---
-name: markdown-memory
-description: Automatically retrieves and maintains native Markdown memory, project specifications, roadmaps, progress, findings, decisions, and session handoffs. Use for every substantive project task, at session orientation and meaningful transitions, and whenever the user asks to remember, recall, forget, audit memory, initialize project state, inspect status, or hand off work.
+name: omni-memory
+description: Automatically retrieves and maintains native Markdown memory, project specifications, roadmaps, progress, findings, decisions, and session handoffs. Use when starting work in a repository, resuming after a break or compaction, before implementation or planning, when the user references earlier work or preferences, and whenever the user asks to remember, recall, forget, audit memory, initialize project state, inspect status, or hand off work.
 ---
 
-# Native Markdown Memory
+# Omni Memory
 
 Maintain durable knowledge and resumable project state without an external memory service. Keep stable memory separate from mutable project control documents and temporary session journals.
 
@@ -32,9 +32,13 @@ Use the Git worktree root as `<project-root>`. Outside Git, use the directory fr
 - `<project-root>/.opencode/project/sessions/` — temporary journals for concurrent sessions.
 - `<project-root>/.opencode/project/archive/<milestone>/` — completed detail archived by milestone.
 
-Templates are bundled under `templates/project/`. Do not overwrite an existing artifact when initializing or expanding project state.
+Templates are bundled under `templates/project/`. Most templates map to a single file of the same name. The two directory-backed templates instantiate under a path rather than at the root: `SESSION.md` seeds each journal at `sessions/YYYY-MM-DD-HHMM-<agent>-<topic>.md`, and `ARCHIVE.md` seeds each milestone summary at `archive/<milestone>/`. Do not overwrite an existing artifact when initializing or expanding project state.
+
+`MEMORY.md` and `HANDOFF.md` load automatically only because the host `opencode.json` `instructions` array injects `~/.config/opencode/memory/GLOBAL.md`, `.opencode/project/MEMORY.md`, and `.opencode/project/HANDOFF.md`. If those paths or filenames change in one place, update the other; nothing else auto-loads. The companion `omni-memory` plugin additionally injects a compact orientation bootstrap into the first user message of each session and defends memory/handoff pointers during compaction; treat its bootstrap as already-loaded guidance, not as a reason to reload this skill.
 
 ## Silent session orientation
+
+Substantive project work is any task that may read, change, or produce durable project state: implementation, debugging, refactoring, planning, review, or a memory command. Skip orientation entirely for pure question-answering, trivial single-file edits with no durable outcome, and scratch work outside a project root; do minimal targeted retrieval instead. Match orientation depth to task risk rather than running the full sequence for small local edits.
 
 At the beginning of substantive project work:
 
@@ -76,6 +80,7 @@ Transitions include:
 - A finding becoming verified, rejected, or promoted
 - Verification materially changing confidence or completion status
 - An explicit remember, forget, correction, audit, status, or handoff request
+- An explicit user correction of agent behavior, or a second occurrence of the same failure, workaround, or misrouting (capture the lesson once, consolidated, in the narrowest correct scope)
 
 Map transitions to artifacts:
 
@@ -116,7 +121,11 @@ Choose scope conservatively:
 - Project memory for repository-derived architecture, commands, conventions, and pitfalls.
 - Global handoff only for configuration or work spanning multiple projects.
 
-Use compact bullets. Add `Source: <path or decision>; verified YYYY-MM-DD` only where provenance or staleness matters. Rewrite or remove superseded claims. Keep active memory concise; archive inactive detail.
+Use compact bullets. Add `Source: <path or decision>; verified YYYY-MM-DD` only where provenance or staleness matters, and obtain the real current date (for example via `date +%F`) rather than guessing it. Rewrite or remove superseded claims. Keep active memory concise; archive inactive detail.
+
+Promote rules out of memory: when an entry is really a standing behavior rule (routing, delegation, tooling, verification), its durable home is the governing configuration — the matching `AGENTS.md` section, agent definition, skill, or command. Encode it there and shrink the memory entry to a one-line pointer. Memory stages lessons; configuration is the rulebook.
+
+Only the primary agent writes memory or project-state artifacts. Subagents never edit `memory/` or `.opencode/project/`; they return candidate lessons, decisions, and findings in their reports, and the primary agent persists what survives these retention rules. When delegating, do not instruct subagents to update memory.
 
 ## Project artifact contract
 
@@ -144,7 +153,7 @@ A hypothesis may instead become `rejected`. Record evidence, impact, and destina
 
 ### Decisions
 
-Material decisions use stable IDs such as `DEC-001` and record rationale, evidence, consequences, affected requirements, and any superseded decision. Keep decisions active as a supersession ledger rather than archiving away their history.
+Material decisions use stable IDs such as `DEC-001` and record rationale, evidence, consequences, affected requirements, and any superseded decision. Keep the decision ledger live rather than deleting history, but bound its active size: keep active decisions in full, and when a decision is superseded compress it to a one-line stub that records its ID, outcome, superseding ID, and date, then move its full rationale detail to `archive/<milestone>/`. The stub preserves the supersession trail while keeping the active file within budget.
 
 ## Lazy project initialization
 
@@ -193,11 +202,11 @@ An explicit `/handoff` performs full reconciliation:
 5. Reconcile and remove completed session journals.
 6. Do not commit.
 
-If a session ends abruptly, the most recent meaningful-transition updates are the best-effort checkpoint. Skill-only memory cannot guarantee a final session-close hook.
+If a session ends abruptly, the most recent meaningful-transition updates are the best-effort checkpoint. Skill-only memory cannot guarantee a final session-close hook. The companion plugin's compaction hook mitigates the compaction case by instructing the summarizer to carry forward memory pointers and un-persisted decisions, findings, and blockers — but it cannot write files itself; persist state at transitions rather than relying on it.
 
 ## Milestone archival
 
-At milestone completion, keep active files compact by moving completed roadmap detail, resolved findings, old progress snapshots, and milestone handoffs into `archive/<milestone>/`. Keep concise active summaries and retain `DECISIONS.md` as the live supersession ledger. Git history remains the complete revision trail.
+At milestone completion, keep active files compact by moving completed roadmap detail, resolved findings, old progress snapshots, and milestone handoffs into `archive/<milestone>/`. Keep concise active summaries. Retain `DECISIONS.md` as the live supersession ledger, but compress superseded entries to stubs and archive their full detail as above. Git history remains the complete revision trail.
 
 ## Recall, correction, forgetting, and audit
 
